@@ -292,6 +292,20 @@ const selfAssessment = computed(() => {
   }
 })
 
+// The member's one-time baseline profile (smoking/alcohol history, daily
+// voice-use hours, home/work environment) — same key ImproveResultView.vue
+// reads/writes. Unlike the per-recording assessment, this isn't tied to any
+// one recording, so it has no session timestamp key.
+const LS_BASELINE_KEY = 'vocasense:baselineAnswers'
+const voiceBaseline = computed(() => {
+  try {
+    const raw = localStorage.getItem(LS_BASELINE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+})
+
 // Backend returns scores/conditions but no coaching copy, so recommendations
 // are derived client-side from the same conditions shown in the metric cards,
 // plus this recording's self-assessment answers (if the user submitted one) —
@@ -336,6 +350,52 @@ const recommendations = computed(() => {
     const hoursSlept = Number(assessment.hoursSlept)
     if (assessment.hoursSlept !== '' && !Number.isNaN(hoursSlept) && hoursSlept < 6 && !items.some((i) => i.kind === 'sleep')) {
       items.push({ kind: 'sleep', text: 'You reported less sleep than usual — try to rest more before your next recording', priority: 'moderate' })
+    }
+
+    if (assessment.alcohol === 'yes' || assessment.smoked === 'yes') {
+      items.push({ kind: 'rest', text: 'Avoid alcohol and smoking before recording — they can affect your voice', priority: 'moderate' })
+    }
+
+    const glassesToday = Number(assessment.glassesToday)
+    if (assessment.glassesToday !== '' && !Number.isNaN(glassesToday) && glassesToday < 6 && !items.some((i) => i.kind === 'water')) {
+      items.push({ kind: 'water', text: 'You reported drinking less water than recommended today — try to increase your intake', priority: 'moderate' })
+    }
+
+    const voiceUse = assessment.regularVoiceUse || []
+    const environment = assessment.environment || []
+    if (
+      (voiceUse.includes('Shout or yell') || voiceUse.includes('Speak loudly') || environment.includes('Noisy')) &&
+      !items.some((i) => i.kind === 'voice')
+    ) {
+      items.push({ kind: 'voice', text: 'You reported shouting, speaking loudly, or a noisy environment — try to lower your volume', priority: 'moderate' })
+    }
+  }
+
+  // Baseline-derived tips are long-term risk factors, not about this specific
+  // recording, so each is worded as "your baseline shows..." to stay distinct
+  // from the acoustic- and assessment-based tips above rather than blending in
+  // unexplained (e.g. quietly lowering a threshold would look like the system
+  // mis-measured this recording).
+  const baseline = voiceBaseline.value
+  if (baseline) {
+    if (baseline.smokingStatus === 'current' || baseline.alcoholStatus === 'yes') {
+      items.push({ kind: 'rest', text: 'Your baseline shows regular smoking or alcohol use — both are long-term risk factors for vocal health', priority: 'moderate' })
+    }
+
+    const hoursVoiceHome = Number(baseline.hoursVoiceHome)
+    const hoursVoiceWork = Number(baseline.hoursVoiceWork)
+    const totalDailyVoiceHours = (Number.isNaN(hoursVoiceHome) ? 0 : hoursVoiceHome) + (Number.isNaN(hoursVoiceWork) ? 0 : hoursVoiceWork)
+    if (totalDailyVoiceHours >= 6) {
+      items.push({ kind: 'warmup', text: 'Your baseline shows heavy daily voice use — take short vocal breaks throughout the day', priority: 'moderate' })
+    }
+
+    const baselineVoiceUse = baseline.regularVoiceUse || []
+    const baselineEnvironment = [...(baseline.homeEnvironment || []), ...(baseline.workEnvironment || [])]
+    if (
+      (baselineVoiceUse.includes('Shout or yell') || baselineVoiceUse.includes('Speak loudly') || baselineEnvironment.includes('Noisy')) &&
+      !items.some((i) => i.kind === 'voice')
+    ) {
+      items.push({ kind: 'voice', text: 'Your baseline shows frequent loud speaking or noisy environments — these add up to long-term vocal strain', priority: 'moderate' })
     }
   }
 
