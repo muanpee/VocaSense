@@ -36,9 +36,17 @@ origins = [origin.strip() for origin in configured_origins.split(",") if origin.
 if not origins:
     origins = DEFAULT_CORS_ORIGINS
 
+# Vercel assigns a unique URL to each preview deployment. Allow previews only
+# for this project instead of restarting the service whenever that URL changes.
+vercel_preview_origin_regex = os.getenv(
+    "CORS_ORIGIN_REGEX",
+    r"^https://voca-sense-(?:git-[a-z0-9-]+|[a-z0-9]+)-kirana-prits-projects\.vercel\.app$",
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=vercel_preview_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
