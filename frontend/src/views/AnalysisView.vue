@@ -280,7 +280,14 @@ async function analyzePendingRecording(input) {
   analysisResult.value = result
   sessionStorage.setItem('vocasense:lastVoiceAnalysis', JSON.stringify(result))
   sessionStorage.setItem('vocasense:lastVoiceAnalysisAt', new Date().toISOString())
-  window.history.replaceState({ ...window.history.state, voiceAnalysis: result }, '')
+  // Some browsers reject a large object in history.state. The result is
+  // already persisted in sessionStorage, so that limitation must not prevent
+  // a completed analysis from reaching the Result page.
+  try {
+    window.history.replaceState({ ...window.history.state, voiceAnalysis: result }, '')
+  } catch (error) {
+    console.warn('Could not add the voice analysis to history state.', error)
+  }
   console.log('[voice_analysis]', result)
 
   // The backend owns all analysis persistence. In particular, guest sessions
@@ -292,7 +299,8 @@ async function analyzePendingRecording(input) {
     sessionStorage.removeItem('vocasense:lastAnalysisId')
   }
 
-  setTimeout(() => router.push('/result'), 300)
+  await wait(300)
+  await router.push('/result')
 }
 
 function completeStepsFromStoredResult(result) {
